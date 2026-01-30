@@ -1,15 +1,34 @@
-using System.Net.WebSockets;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.OpenApi.Models; // REQUIRED for OpenApiInfo
 using PlivoPubSub.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services
+// Add services to the container.
 builder.Services.AddSingleton<IPubSubService, PubSubService>();
+
+// Swagger Configuration
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Plivo Pub/Sub API",
+        Version = "v1",
+        Description = "In-memory Pub/Sub system with WebSocket and REST interfaces"
+    });
+});
 
 var app = builder.Build();
 
-// Enable WebSockets
+// Enable Swagger UI
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Plivo Pub/Sub API v1");
+    c.RoutePrefix = "swagger";
+});
+
 app.UseWebSockets();
 
 // WebSocket Endpoint
@@ -26,7 +45,7 @@ app.Map("/ws", async (HttpContext context, IPubSubService pubSub) =>
     }
 });
 
-[cite_start]// REST API: Create Topic [cite: 163]
+// REST APIs
 app.MapPost("/topics", ([FromBody] CreateTopicRequest req, IPubSubService pubSub) =>
 {
     if (pubSub.CreateTopic(req.Name))
@@ -35,7 +54,6 @@ app.MapPost("/topics", ([FromBody] CreateTopicRequest req, IPubSubService pubSub
     return Results.Conflict();
 });
 
-[cite_start]// REST API: Delete Topic [cite: 168]
 app.MapDelete("/topics/{name}", (string name, IPubSubService pubSub) =>
 {
     if (pubSub.DeleteTopic(name))
@@ -44,7 +62,6 @@ app.MapDelete("/topics/{name}", (string name, IPubSubService pubSub) =>
     return Results.NotFound();
 });
 
-[cite_start]// REST API: List Topics [cite: 172]
 app.MapGet("/topics", (IPubSubService pubSub) =>
 {
     var topics = pubSub.GetTopics().Select(name =>
@@ -55,13 +72,11 @@ app.MapGet("/topics", (IPubSubService pubSub) =>
     return Results.Ok(new { topics });
 });
 
-[cite_start]// REST API: Health [cite: 183]
 app.MapGet("/health", (IPubSubService pubSub) =>
 {
     return Results.Ok(pubSub.GetGlobalStats());
 });
 
-[cite_start]// REST API: Stats [cite: 190]
 app.MapGet("/stats", (IPubSubService pubSub) =>
 {
     var topics = pubSub.GetTopics().ToDictionary(
@@ -76,5 +91,4 @@ app.MapGet("/stats", (IPubSubService pubSub) =>
 
 app.Run();
 
-// DTO for creation
 public record CreateTopicRequest(string Name);

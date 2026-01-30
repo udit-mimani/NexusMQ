@@ -1,14 +1,9 @@
 using PlivoPubSub.Models;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace PlivoPubSub.Services;
 
@@ -19,13 +14,11 @@ public interface IPubSubService
     List<string> GetTopics();
     TopicStats? GetTopicStats(string name);
     Dictionary<string, object> GetGlobalStats();
-
     Task HandleClientAsync(WebSocket webSocket);
 }
 
 public class PubSubService : IPubSubService
 {
-    // Thread-safe dictionary for topics. Key: Topic Name
     private readonly ConcurrentDictionary<string, TopicState> _topics = new();
     private readonly ILogger<PubSubService> _logger;
 
@@ -34,16 +27,13 @@ public class PubSubService : IPubSubService
         _logger = logger;
     }
 
-    public bool CreateTopic(string name)
-    {
-        return _topics.TryAdd(name, new TopicState(name));
-    }
+    public bool CreateTopic(string name) => _topics.TryAdd(name, new TopicState(name));
 
     public bool DeleteTopic(string name)
     {
         if (_topics.TryRemove(name, out var topicState))
         {
-            topicState.Close(); // Disconnect all subscribers
+            topicState.Close();
             return true;
         }
         return false;
@@ -68,7 +58,7 @@ public class PubSubService : IPubSubService
     {
         return new Dictionary<string, object>
         {
-            { "uptime_sec",  (DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds },
+            { "uptime_sec", (DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds },
             { "topics", _topics.Count },
             { "subscribers", _topics.Values.Sum(t => t.Subscribers.Count) }
         };
@@ -78,8 +68,6 @@ public class PubSubService : IPubSubService
     {
         var buffer = new byte[1024 * 4];
         var handlerId = Guid.NewGuid().ToString();
-
-        // Track subscriptions for this specific connection so we can cleanup on disconnect
         var mySubscriptions = new List<string>();
 
         try
@@ -120,19 +108,16 @@ public class PubSubService : IPubSubService
                             await SendErrorAsync(webSocket, msg.RequestId, "BAD_REQUEST", "Topic required");
                             break;
                         }
-                        if (!_topics.ContainsKey(msg.Topic))
+                        if (!_topics.TryGetValue(msg.Topic, out var topic))
                         {
                             await SendErrorAsync(webSocket, msg.RequestId, "TOPIC_NOT_FOUND", "Topic does not exist");
                             break;
                         }
 
-                        var topic = _topics[msg.Topic];
                         var sub = new Subscriber(msg.ClientId ?? handlerId, webSocket);
-
                         if (topic.Subscribers.TryAdd(sub.Id, sub))
                         {
                             mySubscriptions.Add(msg.Topic);
-                            // Start a background task to push messages to this socket
                             _ = ProcessSubscriptionAsync(sub, topic, webSocket);
                         }
 
@@ -151,17 +136,13 @@ public class PubSubService : IPubSubService
                             break;
                         }
 
-                        // Broadcast
                         await pubTopic.BroadcastAsync(msg.Message);
                         await SendJsonAsync(webSocket, new ServerMessage { Type = "ack", RequestId = msg.RequestId, Topic = msg.Topic, Status = "ok" });
                         break;
 
                     case "unsubscribe":
-                        // Logic to remove subscriber from topic
                         if (!string.IsNullOrEmpty(msg.Topic) && _topics.TryGetValue(msg.Topic, out var unsubTopic))
                         {
-                            // Simple removal logic (in production, need robust mapping)
-                            // For this demo, we rely on the specific instance management or ID
                             unsubTopic.RemoveSubscriber(msg.ClientId ?? handlerId);
                             mySubscriptions.Remove(msg.Topic);
                             await SendJsonAsync(webSocket, new ServerMessage { Type = "ack", RequestId = msg.RequestId, Topic = msg.Topic, Status = "ok" });
@@ -176,7 +157,6 @@ public class PubSubService : IPubSubService
         }
         finally
         {
-            // Cleanup subscriptions
             foreach (var topicName in mySubscriptions)
             {
                 if (_topics.TryGetValue(topicName, out var t))
@@ -204,7 +184,7 @@ public class PubSubService : IPubSubService
                 await SendJsonAsync(ws, eventMsg);
             }
         }
-        catch (ChannelClosedException) { } // Channel closed (slow consumer or disconnect)
+        catch (ChannelClosedException) { }
     }
 
     private async Task SendJsonAsync(WebSocket ws, ServerMessage msg)
@@ -226,7 +206,6 @@ public class PubSubService : IPubSubService
     }
 }
 
-// Helper classes for internal state
 public class TopicState
 {
     public string Name { get; }
@@ -241,13 +220,7 @@ public class TopicState
         Interlocked.Increment(ref _messageCount);
         foreach (var sub in Subscribers.Values)
         {
-            // Non-blocking write. If full, we drop (Backpressure policy: Drop Oldest/Newest or Close)
-            // Here we use TryWrite. If false, channel is full (Slow Consumer).
-            if (!sub.Channel.Writer.TryWrite(payload))
-            {
-                // Option: Close connection or Drop message. 
-                // Assignment says "Overflow drop oldest OR disconnect". Let's drop message for simplicity.
-            }
+            sub.Channel.Writer.TryWrite(payload);
         }
     }
 
@@ -273,14 +246,12 @@ public class Subscriber
 {
     public string Id { get; }
     public WebSocket Socket { get; }
-    [cite_start]// Bounded channel for backpressure [cite: 206]
     public Channel<MessagePayload> Channel { get; }
 
     public Subscriber(string id, WebSocket socket)
     {
         Id = id;
         Socket = socket;
-        // Bounded capacity of 50 messages
         Channel = System.Threading.Channels.Channel.CreateBounded<MessagePayload>(new BoundedChannelOptions(50)
         {
             FullMode = BoundedChannelFullMode.DropOldest
