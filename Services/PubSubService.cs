@@ -1,11 +1,11 @@
-using PlivoPubSub.Models;
+using NexusMQ.Models;
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 
-namespace PlivoPubSub.Services;
+namespace NexusMQ.Services;
 
 public interface IPubSubService
 {

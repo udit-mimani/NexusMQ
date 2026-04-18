@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models; // REQUIRED for OpenApiInfo
-using PlivoPubSub.Services;
+using NexusMQ.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +13,7 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "Plivo Pub/Sub API",
+        Title = "NexusMQ API",
         Version = "v1",
         Description = "In-memory Pub/Sub system with WebSocket and REST interfaces"
     });
@@ -25,7 +25,7 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Plivo Pub/Sub API v1");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "NexusMQ API v1");
     c.RoutePrefix = "swagger";
 });
 

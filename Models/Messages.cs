@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
 
-namespace PlivoPubSub.Models;
+namespace NexusMQ.Models;
 
 // Incoming message from Client
 public class ClientMessage

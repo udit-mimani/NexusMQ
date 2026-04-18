@@ -1,4 +1,4 @@
-# Plivo Pub/Sub System
+# NexusMQ - Real-Time Pub/Sub Engine
 
 A high-performance, in-memory Pub/Sub system built with .NET 8. This service provides a real-time messaging interface via **WebSockets** and a management interface via **REST APIs**[cite: 6].
 
@@ -39,11 +39,11 @@ A high-performance, in-memory Pub/Sub system built with .NET 8. This service pro
 ### Running the Service
 1.  **Build the image**:
     ```bash
-    podman build -t plivo-pubsub .
+    podman build -t nexusmq .
     ```
 2.  **Run the container**:
     ```bash
-    podman run -p 8080:8080 --rm plivo-pubsub
+    podman run -p 8080:8080 --rm nexusmq
     ```
 
 ### API Documentation
